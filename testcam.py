@@ -1,32 +1,16 @@
-import cv2, sched, time, ApiClient, sys, configparser, datetime
+import cv2, sched, time, ApiClient
 from darkflow.net.build import TFNet
 
-counter = 1
-def buildLog( i ):
-    global counter
-    counter += 1
-    print(str(counter).zfill(7)  + " | " + str(datetime.datetime.now().time()) + " | " + i) 
-
-arguments = sys.argv[1:]
-if (len(arguments) == 0):
-	buildLog("ERROR: Add one argument with the version name of the config")
-	sys.exit()
-elif (len(arguments) == 1):	
-	version = arguments[0]
-else:
-	buildLog("ERROR: Too many arguments given.")
-	sys.exit()
-
-config = configparser.ConfigParser()
-config.read('weaviate_config.ini')
+#set location url for crefs
+global locationUrl
+locationUrl = "http://[::]:8070"
 
 #define weaviate api key and ip adress where weaviate is running, and connect to api client class
-api_token = config[version]['api_token']
-ip_address = config[version]['ip_address']
-locationUrl = config[version]['locationUrl']
-api = ApiClient.ApiClient(api_token, ip_address)
+api_token = '411d94f0-b7d5-4657-b2c5-5763b19b54ab'
+ip_adres = '35.205.117.104'
+api = ApiClient.ApiClient(api_token, ip_adres)
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 s = sched.scheduler(time.time, time.sleep)
 counter = 0
 
@@ -42,10 +26,13 @@ def get_key(property_name, property_value, class_name):
 	
 	#schema in things left out, only uuid needed
 	
-	body = {"query": "{listThings(schema:\"" + property_name + ":" + str(property_value) + "\", class:\"" + class_name + "\") {things{uuid}}}"}
+	body = {"query": "{ \n    listThings(schema:\"" + property_name + ":" + str(property_value) + "\", class:\"" + class_name + "\") { \n        things { \n            uuid \n        } \n    } \n}"}
 	result = api.post_graphql(body)
 	if result is not None: #if uuid found, return uuid
-		return result
+		try: #return thingID
+			return result["uuid"]
+		except: #return error code and reason
+			return result
 	else: #make new thing and return uuid
 		return False
 
@@ -61,6 +48,15 @@ def post_thing(thing):
 	result = api.post_thing(body)
 
 def patch_thing(uuid, thing):
+	# body = {}	
+	# body["@context"] = "http://dbpedia.org"
+	# body["@class"] = "Thing"
+	# schema = {}
+	# schema["name"] = thing["name"]
+	# schema["size"] = thing["size"]
+	# schema["location"] = room_cref
+	# body["schema"] = schema
+
 	body = {}
 	body["op"] = "replace"
 	body["path"] = "/schema/size"
@@ -81,11 +77,8 @@ def get_things_in_room():
 def import_things_weaviate(things):
 	#get all things in weaviate room
 	weaviate_things = get_things_in_room()
-	weaviate_thing_list = []
-	for thing in weaviate_things:
-		if (thing["name"] == "Light 1 DEA 01.001") or (thing["name"] == "Light 2 DEA 01.001") or (thing["name"] == "Light 3 DEA 01.001") or (thing["name"] == "Smartphone"):
-			continue
-		weaviate_thing_list.append(thing)
+
+	weaviate_thing_list = weaviate_things
 	room_objects = things
 	
 	#update already existing things in room
@@ -115,7 +108,6 @@ def check_objects(objects):
 	for object in objects:
 		if object["name"] in check_labels:
 			things.append(object)
-	print(things)
 	return things
 
 def get_objects(img):
@@ -125,6 +117,7 @@ def get_objects(img):
 		if result['confidence'] >= 0.5:
 			x = result['bottomright']['x'] - result['topleft']['x']
 			y = result['bottomright']['y'] - result['topleft']['y']
+			print(result['label'], result['confidence'], x*y)
 			object = {}
 			object["name"] = result["label"]
 			object["size"] = x*y
@@ -133,8 +126,8 @@ def get_objects(img):
 
 def take_picture():
 	ret, frame = cap.read()
-	#filename = 'testcapture' + str(counter) + '.jpg'
-	#cv2.imwrite(filename, frame)
+	filename = 'testcapture' + str(counter) + '.jpg'
+	cv2.imwrite(filename, frame)
 	return frame
 
 def get_picture(): 
@@ -147,7 +140,7 @@ def get_picture():
 	counter += 1
 
 def start_taking_pics():
-	get_picture()
+	s.enter(5, 1, get_picture, ())
 	s.run()
 
 def load_model():

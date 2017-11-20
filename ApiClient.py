@@ -42,7 +42,7 @@ class ApiClient:
 		if response.status_code == 200:
 			result = json.loads(response.content.decode('utf-8'))
 			if len(result["data"]["listThings"]["things"]) > 0:
-				return result["data"]["listThings"]["things"] #return uuid of first thing in result
+				return result["data"]["listThings"]["things"] #return first thing in result
 			else:
 				return []
 		else:
